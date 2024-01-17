@@ -105,10 +105,13 @@ def format_int_plot():
 
 
 def int_plot(df):
-    span_plot, ax, time_ax, s1_ax, s2_ax, s3_ax = format_int_plot()
+    span_plot, ax, s1_ax, s2_ax, s3_ax, s4_ax = format_int_plot()
+    sensor_axes = [s1_ax, s2_ax, s3_ax, s4_ax]
 
-    
+    for i, ax in enumerate(sensor_axes):
+        ax.plot(df[COLUMN_HEADERS[0]], df[COLUMN_HEADERS[i+1]], '.', markersize=1)
 
+    plt.show()
 
 def read_lvm(fp):
     with open(fp, 'rb') as file:
