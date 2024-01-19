@@ -1,0 +1,7 @@
+- run 'install_packages.py' before any other software execution
+- run main.py
+- small tkinter window open to prompt data file selection and code execution
+- after selecting data file, click submit
+- 2x2 interactive plot window opens
+- all 4 panels are interactable, and coupled. So a selection in one will update in the others
+- selection of data saves statistical calculations to files in 'output' folder

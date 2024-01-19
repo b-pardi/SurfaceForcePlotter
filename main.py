@@ -59,8 +59,26 @@ def get_file(label_var):
     FILE = fp
 
 
+def read_lvm(fp):
+    with open(fp, 'rb') as file:
+        raw_file = file.read()
+
+    raw_file = raw_file.replace(b'\r\n', b'\n') # replace CRLF with newline
+
+    # use regex to find start of data file
+    data_begin_pattern = rb'\*\*\*End_of_Header\*\*\*.*?(\n.*?)(?=\*\*\*End_of_Header|\Z)'
+    matches = re.finditer(data_begin_pattern, raw_file, re.DOTALL)
+    next(matches) # ***END OF HEADER*** occurs twice before data happens
+    target = next(matches).group(1).decode('utf-8')
+
+    df = pd.read_csv(StringIO(target)) # make dataframe of cleaned values
+    print(df.head())
+    
+    return df
+
+
 # plot formatting
-def format_int_plot():
+def generate_int_plot():
     # declare plot and subplots
     span_plot = plt.figure()
     plt.subplots_adjust(hspace=0.2, wspace=0.2)
@@ -105,30 +123,40 @@ def format_int_plot():
 
 
 def int_plot(df):
-    span_plot, ax, s1_ax, s2_ax, s3_ax, s4_ax = format_int_plot()
+    span_plot, ax, s1_ax, s2_ax, s3_ax, s4_ax = generate_int_plot()
     sensor_axes = [s1_ax, s2_ax, s3_ax, s4_ax]
+    spans = []
 
+    x_data = df[COLUMN_HEADERS[0]]
+    s1_data = df[COLUMN_HEADERS[1]]
+    s2_data = df[COLUMN_HEADERS[2]]
+    s3_data = df[COLUMN_HEADERS[3]]
+    s4_data = df[COLUMN_HEADERS[4]]
+
+    # initial plotting of data
     for i, ax in enumerate(sensor_axes):
         ax.plot(df[COLUMN_HEADERS[0]], df[COLUMN_HEADERS[i+1]], '.', markersize=1)
 
+    def onselect(xmin, xmax):
+        imin, imax = np.searchsorted(x_data, (xmin, xmax))
+        imax = min(len(x_data) - 1, imax)
+
+        print(imin, imax, xmin, xmax)
+
+    # create span selector objects for all 4 subplot axes
+    for i in range(4):
+        spans.append(
+            SpanSelector(
+                sensor_axes[i],
+                onselect,
+                'horizontal',
+                useblit=True,
+                interactive=True,
+                props=dict(alpha=0.3,facecolor='gray')
+            )
+        )
+
     plt.show()
-
-def read_lvm(fp):
-    with open(fp, 'rb') as file:
-        raw_file = file.read()
-
-    raw_file = raw_file.replace(b'\r\n', b'\n') # replace CRLF with newline
-
-    # use regex to find start of data file
-    data_begin_pattern = rb'\*\*\*End_of_Header\*\*\*.*?(\n.*?)(?=\*\*\*End_of_Header|\Z)'
-    matches = re.finditer(data_begin_pattern, raw_file, re.DOTALL)
-    next(matches) # ***END OF HEADER*** occurs twice before data happens
-    target = next(matches).group(1).decode('utf-8')
-
-    df = pd.read_csv(StringIO(target)) # make dataframe of cleaned values
-    print(df.head())
-    
-    return df
 
 
 def main():
