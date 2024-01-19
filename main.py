@@ -122,16 +122,38 @@ def generate_int_plot():
     return span_plot, ax, s1_ax, s2_ax, s3_ax, s4_ax
 
 
+def statistically_analyze_selected_range(df, imin, imax):
+    print("\n\n*********",type(df[COLUMN_HEADERS[0]].values),'\n',df[COLUMN_HEADERS[0]])
+
+    range_df = df.iloc[imin:imax+1].copy() # slice of df containing selected data
+
+    # create new dataframe of statistical data analyzed from selected range
+    stats_df = pd.DataFrame({
+        "xmin": range_df[COLUMN_HEADERS[0]].values[0],
+        "xmax": range_df[COLUMN_HEADERS[0]].values[-1],
+        "s1_mean": np.average(range_df[COLUMN_HEADERS[1]].values),
+        "s1_stddev": np.median(range_df[COLUMN_HEADERS[1]].values),
+        "s2_mean": np.average(range_df[COLUMN_HEADERS[2]].values),
+        "s2_stddev": np.median(range_df[COLUMN_HEADERS[2]].values),
+        "s3_mean": np.average(range_df[COLUMN_HEADERS[3]].values),
+        "s3_stddev": np.median(range_df[COLUMN_HEADERS[3]].values),
+        "s4_mean": np.average(range_df[COLUMN_HEADERS[4]].values),
+        "s4_stddev": np.median(range_df[COLUMN_HEADERS[4]].values),
+    }, index=[0])
+
+    stats_df_T = stats_df.T # transpose for readability
+    stats_df_T.to_csv("output/sensor_stats_T.csv", float_format="%.8E", index=True)
+    stats_df.to_csv("output/sensor_stats.csv", float_format="%.8E", index=False)
+    
+    print("STATS SAVED TO 'output/sensor_stats.csv'")
+
+
 def int_plot(df):
     span_plot, ax, s1_ax, s2_ax, s3_ax, s4_ax = generate_int_plot()
     sensor_axes = [s1_ax, s2_ax, s3_ax, s4_ax]
     spans = []
 
     x_data = df[COLUMN_HEADERS[0]]
-    s1_data = df[COLUMN_HEADERS[1]]
-    s2_data = df[COLUMN_HEADERS[2]]
-    s3_data = df[COLUMN_HEADERS[3]]
-    s4_data = df[COLUMN_HEADERS[4]]
 
     # initial plotting of data
     for i, ax in enumerate(sensor_axes):
@@ -142,6 +164,12 @@ def int_plot(df):
         imax = min(len(x_data) - 1, imax)
 
         print(imin, imax, xmin, xmax)
+        statistically_analyze_selected_range(df, imin, imax)
+
+        # couple all 4 spans together (update all to match the one just selected)
+        for span in spans:
+            if span.active:
+                span.extents = (xmin, xmax)
 
     # create span selector objects for all 4 subplot axes
     for i in range(4):
