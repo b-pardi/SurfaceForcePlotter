@@ -6,6 +6,7 @@ Created: 1/16/2024
 import tkinter as tk
 from tkinter import filedialog
 from io import StringIO
+import sys
 import os
 import re
 import numpy as np
@@ -23,9 +24,10 @@ from matplotlib.widgets import SpanSelector
 - couple 4 subplots of span selector together
 '''
 
+# global vars
 FILE = ""
-
 COLUMN_HEADERS = ("X_Value","Voltage_0","Voltage_1","Voltage_2","Voltage_3")
+IS_COUPLED = False
 
 def window():
     root = tk.Tk()
@@ -40,12 +42,43 @@ def window():
     data_label = tk.Label(root, textvariable=data_label_var)
     data_label.pack(pady=(0,8))
 
+    # opt to couple/decouple
+    is_coupled_var = tk.IntVar()
+    is_coupled_check = tk.Checkbutton(root, text="Couple subplot selections", variable=is_coupled_var, offvalue=0, onvalue=1, command=lambda: set_couple_var(is_coupled_var))
+    is_coupled_check.pack()
+
     # submit button
     submit_btn = tk.Button(root, text="Submit", command=main)
     submit_btn.pack(padx=32, pady=12)
+
+    # clear output file for when switching datafiles
+    clear_btn = tk.Button(root, text="Clear output file", command=clear_output_file)
+    clear_btn.pack(padx=32, pady=(0,12))
+
+    # exit button
+    exit_btn = tk.Button(root, text="Exit", command=sys.exit)
+    exit_btn.pack(padx=32, pady=(0,12))
     
     root.mainloop()
 
+def clear_output_file():
+    df = pd.read_csv("output/sensor_stats.csv")
+    df['xmin'] = np.nan
+    df['xmax'] = np.nan
+
+    for col in COLUMN_HEADERS:
+        if col != 'X_Value':
+            df[f"{col}_mean"] = np.nan
+            df[f"{col}_stddev"] = np.nan
+
+    dfT = df.T # transpose for readability
+    dfT.to_csv("output/sensor_stats_T.csv", float_format="%.8E", index=True)
+    df.to_csv("output/sensor_stats.csv", float_format="%.8E", index=False)
+
+def set_couple_var(is_coupled_var):
+    global IS_COUPLED
+    IS_COUPLED = True if is_coupled_var.get() == 1 else False
+    print(IS_COUPLED)
 
 def get_file(label_var):
     fp = filedialog.askopenfilename(initialdir=os.path.join(os.getcwd(), 'data'),
@@ -122,24 +155,43 @@ def generate_int_plot():
     return span_plot, ax, s1_ax, s2_ax, s3_ax, s4_ax
 
 
-def statistically_analyze_selected_range(df, imin, imax):
-    print("\n\n*********",type(df[COLUMN_HEADERS[0]].values),'\n',df[COLUMN_HEADERS[0]])
+def statistically_analyze_selected_range(df, imin, imax, cur_col, col_xranges):
+    global IS_COUPLED
+    
+    if IS_COUPLED: # analyze all columns if couple
+        range_df = df.iloc[imin:imax+1].copy() # slice of df containing selected data
+        stats_dict = {
+            "xmin": range_df[COLUMN_HEADERS[0]].values[0],
+            "xmax": range_df[COLUMN_HEADERS[0]].values[-1]
+        }
+        
+        # create new dataframe of statistical data analyzed from selected range
+        for col in COLUMN_HEADERS:
+            if col != 'X_Value':
+                stats_dict[f"{col}_mean"] = np.average(range_df[col].values)
+                stats_dict[f"{col}_stddev"] = np.median(range_df[col].values)
+        
+        stats_df = pd.DataFrame(stats_dict, index=[0])
 
-    range_df = df.iloc[imin:imax+1].copy() # slice of df containing selected data
+    else: # if not coupled set each col's data to its respective col_xrange
+        stats_dict = {}
+        for col in COLUMN_HEADERS:
+            if col != 'X_Value':
+                xmin, xmax = col_xranges[col]
+                if xmin is None:
+                    stats_dict[f"{col}_xmin"] = np.nan
+                    stats_dict[f"{col}_xmax"] = np.nan
+                    stats_dict[f"{col}_mean"] = np.nan
+                    stats_dict[f"{col}_stddev"] = np.nan
+                else:
+                    cur_col_df = df[(df[COLUMN_HEADERS[0]] >= xmin) & (df[COLUMN_HEADERS[0]] <= xmax)]
+                    print(cur_col_df)
+                    stats_dict[f"{col}_xmin"] = cur_col_df[COLUMN_HEADERS[0]].values[0]
+                    stats_dict[f"{col}_xmax"] = cur_col_df[COLUMN_HEADERS[0]].values[-1]
+                    stats_dict[f"{col}_mean"] = np.average(cur_col_df[col].values)
+                    stats_dict[f"{col}_stddev"] = np.median(cur_col_df[col].values)
 
-    # create new dataframe of statistical data analyzed from selected range
-    stats_df = pd.DataFrame({
-        "xmin": range_df[COLUMN_HEADERS[0]].values[0],
-        "xmax": range_df[COLUMN_HEADERS[0]].values[-1],
-        "s1_mean": np.average(range_df[COLUMN_HEADERS[1]].values),
-        "s1_stddev": np.median(range_df[COLUMN_HEADERS[1]].values),
-        "s2_mean": np.average(range_df[COLUMN_HEADERS[2]].values),
-        "s2_stddev": np.median(range_df[COLUMN_HEADERS[2]].values),
-        "s3_mean": np.average(range_df[COLUMN_HEADERS[3]].values),
-        "s3_stddev": np.median(range_df[COLUMN_HEADERS[3]].values),
-        "s4_mean": np.average(range_df[COLUMN_HEADERS[4]].values),
-        "s4_stddev": np.median(range_df[COLUMN_HEADERS[4]].values),
-    }, index=[0])
+        stats_df = pd.DataFrame(stats_dict, index=[0])  
 
     stats_df_T = stats_df.T # transpose for readability
     stats_df_T.to_csv("output/sensor_stats_T.csv", float_format="%.8E", index=True)
@@ -149,40 +201,48 @@ def statistically_analyze_selected_range(df, imin, imax):
 
 
 def int_plot(df):
+    global IS_COUPLED
     span_plot, ax, s1_ax, s2_ax, s3_ax, s4_ax = generate_int_plot()
     sensor_axes = [s1_ax, s2_ax, s3_ax, s4_ax]
     spans = []
-
+    col_xranges = {column: (None, None) for column in COLUMN_HEADERS[1:]} # x ranges of all span selectors
     x_data = df[COLUMN_HEADERS[0]]
 
     # initial plotting of data
     for i, ax in enumerate(sensor_axes):
         ax.plot(df[COLUMN_HEADERS[0]], df[COLUMN_HEADERS[i+1]], '.', markersize=1)
 
-    def onselect(xmin, xmax):
-        imin, imax = np.searchsorted(x_data, (xmin, xmax))
-        imax = min(len(x_data) - 1, imax)
+    def make_onselect(span_selector, column_name):
+        def onselect(xmin, xmax):
+            imin, imax = np.searchsorted(x_data, (xmin, xmax))
+            imax = min(len(x_data) - 1, imax)
+            col_xranges[column_name] = (xmin, xmax)
+            print(col_xranges)
+            if IS_COUPLED:
+                for col in col_xranges.keys():
+                    col_xranges[col] = (xmin, xmax)
+                for span in spans:
+                    if span != span_selector:
+                        span.extents = (xmin, xmax)
+            
+            statistically_analyze_selected_range(df, imin, imax, column_name, col_xranges)
 
-        print(imin, imax, xmin, xmax)
-        statistically_analyze_selected_range(df, imin, imax)
+        return onselect
 
-        # couple all 4 spans together (update all to match the one just selected)
-        for span in spans:
-            if span.active:
-                span.extents = (xmin, xmax)
-
-    # create span selector objects for all 4 subplot axes
-    for i in range(4):
-        spans.append(
-            SpanSelector(
-                sensor_axes[i],
-                onselect,
-                'horizontal',
-                useblit=True,
-                interactive=True,
-                props=dict(alpha=0.3,facecolor='gray')
-            )
+    # Create span selector objects for all 4 subplot axes
+    for i, ax in enumerate(sensor_axes):
+        column_name = COLUMN_HEADERS[i+1]
+        selector = SpanSelector(
+            ax,
+            make_onselect(None, column_name),  # Pass the column name here
+            'horizontal',
+            useblit=True,
+            interactive=True,
+            props=dict(alpha=0.3, facecolor='gray')
         )
+        spans.append(selector)
+        # Update the onselect function with the current selector and column name
+        selector.onselect = make_onselect(selector, column_name)
 
     plt.show()
 
