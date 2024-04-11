@@ -1,6 +1,24 @@
 ## WIP
 
+- zoom in selections of plot
+- ability to cancel selections (zoom back out) by hitting escape
+- friction loop plot
+    - friction voltage (sensor 2) vs position voltage (sensor 1)
+    - choose range of cycles to include in friction loop plot
+- entries for scalar values to change units
+
+
 # Changelog
+
+4/10
+- added function to find the number of cycles in a given selection
+    - finds the fft of the signal in the selection
+    - multiplies the dominant frequency to the duration of the selection for n_cycles
+- added a legend that shows the number of cycles in the selection
+- modified cycle counter to also grab the start and end time points of each cycle
+- added cycle labels to selection
+- added dashed horizontal lines to indicate cycle ranges
+
 4/4
 - added ability to couple/decouple selections
     - checkbox in ui sets a global var IS_COUPLED

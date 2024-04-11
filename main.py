@@ -11,6 +11,7 @@ import os
 import re
 import numpy as np
 import pandas as pd
+from scipy import signal
 import matplotlib
 try:
     matplotlib.use('TkAgg')
@@ -106,6 +107,7 @@ def read_lvm(fp):
 
     df = pd.read_csv(StringIO(target)) # make dataframe of cleaned values
     print(df.head())
+    df.to_csv("output/parsed_labview.csv", index=False)
     
     return df
 
@@ -153,6 +155,47 @@ def generate_int_plot():
     ax.tick_params(labelcolor='w', top=False, bottom=False, left=False, right=False)
 
     return span_plot, ax, s1_ax, s2_ax, s3_ax, s4_ax
+
+
+def get_sr(df):
+    avg_sample_interval = np.mean(np.diff(df[COLUMN_HEADERS[0]]))
+    return 1 / avg_sample_interval
+
+
+def find_num_cycles(df, column_name, col_xranges):
+    xmin, xmax = col_xranges[column_name]
+    xmin = max(0, xmin)
+    xmax = min(df[COLUMN_HEADERS[0]].iloc[-1], xmax)
+    range_df = df[(df[COLUMN_HEADERS[0]] >= xmin) & (df[COLUMN_HEADERS[0]] <= xmax)]
+
+    signal_fft = np.fft.fft(range_df[column_name]) # Fast Fourier transform of signal data to find dominant frequency
+    N = len(range_df[column_name]) # N points
+    T = np.mean(np.diff(df[COLUMN_HEADERS[0]])) # sampling interval
+    
+    freqs = np.fft.fftfreq(N, T)[:N // 2] # fft produces mirror image, so we only need half the data hence the [:N//2]
+    magnitude = np.abs(signal_fft)[:N // 2] # take only real parts of fft
+    magnitude_norm = magnitude * (1 / N) # normalize magnitude by number of points
+    max_magnitude_idx = np.argmax(magnitude_norm)
+    dom_freq = freqs[max_magnitude_idx]
+
+    selection_duration = xmax - xmin
+    n_cycles = dom_freq * selection_duration
+
+    # find n_cycles before selection to cycle labelling knows where to start
+    n_cycles_prior = dom_freq * (xmin - 0)
+
+    # Generate cycle start and end points
+    period = 1 / dom_freq
+    cycle_points = []
+    current_x = xmin
+    while current_x + 0.5*period <= xmax:
+        cycle_points.append((current_x, current_x + period))
+        current_x += period
+
+    print(f"***Selection contains approximately {n_cycles} cycles between {xmin}s and {xmax}s\n{cycle_points}")
+
+    # Return the list of cycle start and end x-values
+    return n_cycles, n_cycles_prior, cycle_points
 
 
 def statistically_analyze_selected_range(df, imin, imax, cur_col, col_xranges):
@@ -217,16 +260,37 @@ def int_plot(df):
             imin, imax = np.searchsorted(x_data, (xmin, xmax))
             imax = min(len(x_data) - 1, imax)
             col_xranges[column_name] = (xmin, xmax)
-            print(col_xranges)
             if IS_COUPLED:
                 for col in col_xranges.keys():
                     col_xranges[col] = (xmin, xmax)
                 for span in spans:
                     if span != span_selector:
                         span.extents = (xmin, xmax)
-            
-            statistically_analyze_selected_range(df, imin, imax, column_name, col_xranges)
 
+            # selection analysis
+            statistically_analyze_selected_range(df, imin, imax, column_name, col_xranges)
+            for col in list(col_xranges.keys())[:2]: # only first 2 columns have periodicity
+                if col_xranges[col][0]:
+                    n_cycles, n_cycles_prior, cycle_points = find_num_cycles(df, col, col_xranges)
+                    # update legend with the number of cycles
+                    ax = sensor_axes[COLUMN_HEADERS.index(col) - 1]  # Get the correct axis based on column_name
+                    ax.legend([f"n cycles: {n_cycles:.2f}"], loc='upper right')  # Add legend to the subplot
+            
+                    # labelling cycles
+                    [t.remove() for t in ax.texts] # remove old cycle texts
+                    [l.remove() for l in ax.lines if l.get_linestyle() == '--'] # remove old lines
+                    for i, (start_x, end_x) in enumerate(cycle_points):
+                        start_idx = (np.abs(x_data - start_x)).argmin()
+                        end_idx = (np.abs(x_data - end_x)).argmin()
+                        mid_x = (start_x + end_x) / 2
+                        mid_y = df[column_name][(start_idx + end_idx) // 2]
+                        ax.annotate(f'Cycle {i+int(np.round(n_cycles_prior))+1}', xy=(mid_x, mid_y), textcoords='offset points', xytext=(0,10), ha='center')
+                        
+                        # Draw vertical dashed lines at the start of cycles
+                        ax.axvline(x=x_data[start_idx], color='grey', linestyle='--', linewidth=1)
+                        ax.axvline(x=x_data[end_idx], color='grey', linestyle='--', linewidth=1)
+            
+            plt.draw()
         return onselect
 
     # Create span selector objects for all 4 subplot axes
