@@ -18,6 +18,8 @@
 - modified cycle counter to also grab the start and end time points of each cycle
 - added cycle labels to selection
 - added dashed horizontal lines to indicate cycle ranges
+- sub plots now zoom to the span selector range
+- esc key resets selection and plots back to their original state
 
 4/4
 - added ability to couple/decouple selections

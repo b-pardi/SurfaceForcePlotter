@@ -243,6 +243,33 @@ def statistically_analyze_selected_range(df, imin, imax, cur_col, col_xranges):
     print("STATS SAVED TO 'output/sensor_stats.csv'")
 
 
+def reset_ax(ax, df):
+    init_xmin = df[COLUMN_HEADERS[0]].min()
+    init_xmax = df[COLUMN_HEADERS[0]].max()
+    ax.set_xlim(init_xmin, init_xmax)
+    # Remove all annotations, legends, and vertical lines
+    ax.legend_ = None
+    [t.remove() for t in reversed(ax.texts)]
+    [l.remove() for l in reversed(ax.lines) if l.get_linestyle() == '--']
+    # Redraw the canvas
+    ax.figure.canvas.draw()
+
+
+def on_key(event, sensor_axes, df, spans, col_xranges):
+    global IS_COUPLED
+    xmin = df[COLUMN_HEADERS[0]].min()
+    xmax = df[COLUMN_HEADERS[0]].max()
+
+    if event.key == 'escape':
+        for ax in sensor_axes:
+            reset_ax(ax, df)
+        if IS_COUPLED:
+            for span in spans:
+                span.extents = (xmin, xmax)
+        for key in col_xranges.keys():
+            col_xranges[key] = (None, None)
+
+
 def int_plot(df):
     global IS_COUPLED
     span_plot, ax, s1_ax, s2_ax, s3_ax, s4_ax = generate_int_plot()
@@ -263,18 +290,24 @@ def int_plot(df):
             if IS_COUPLED:
                 for col in col_xranges.keys():
                     col_xranges[col] = (xmin, xmax)
+                    ax = sensor_axes[COLUMN_HEADERS.index(col) - 1]  # Get the correct axis based on column_name
+                    ax.set_xlim(xmin, xmax)
                 for span in spans:
                     if span != span_selector:
                         span.extents = (xmin, xmax)
+            else:
+                ax = sensor_axes[COLUMN_HEADERS.index(column_name) - 1]  # Get the correct axis based on column_name
+                ax.set_xlim(xmin, xmax)
 
             # selection analysis
             statistically_analyze_selected_range(df, imin, imax, column_name, col_xranges)
+            
             for col in list(col_xranges.keys())[:2]: # only first 2 columns have periodicity
                 if col_xranges[col][0]:
                     n_cycles, n_cycles_prior, cycle_points = find_num_cycles(df, col, col_xranges)
                     # update legend with the number of cycles
                     ax = sensor_axes[COLUMN_HEADERS.index(col) - 1]  # Get the correct axis based on column_name
-                    ax.legend([f"n cycles: {n_cycles:.2f}"], loc='upper right')  # Add legend to the subplot
+                    ax.legend([f"n cycles: {n_cycles:.2f}"], loc='best')  # Add legend to the subplot
             
                     # labelling cycles
                     [t.remove() for t in ax.texts] # remove old cycle texts
@@ -302,11 +335,17 @@ def int_plot(df):
             'horizontal',
             useblit=True,
             interactive=True,
-            props=dict(alpha=0.3, facecolor='gray')
+            props=dict(alpha=0.1, facecolor='gray')
         )
         spans.append(selector)
         # Update the onselect function with the current selector and column name
         selector.onselect = make_onselect(selector, column_name)
+
+    # bind esc key press event to the on_key function with additional arguments
+    span_plot.canvas.mpl_connect(
+        'key_press_event', 
+        lambda event: on_key(event, sensor_axes, df, spans, col_xranges)
+    )
 
     plt.show()
 
