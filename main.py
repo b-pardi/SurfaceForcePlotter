@@ -29,13 +29,15 @@ from matplotlib.widgets import SpanSelector
 FILE = ""
 COLUMN_HEADERS = ("X_Value","Voltage_0","Voltage_1","Voltage_2","Voltage_3")
 IS_COUPLED = False
+WILL_PLOT_FFT = False
+
 
 def window():
     root = tk.Tk()
     
     # file browse button
     data_label_var = tk.StringVar()
-    file_btn = tk.Button(root, text="Browse for data file", command=lambda: get_file(data_label_var))
+    file_btn = tk.Button(root, text="Browse for data file", command=lambda: get_file(data_label_var), width=15)
     file_btn.pack(padx=32,pady=24)
 
     # file name label
@@ -48,19 +50,51 @@ def window():
     is_coupled_check = tk.Checkbutton(root, text="Couple subplot selections", variable=is_coupled_var, offvalue=0, onvalue=1, command=lambda: set_couple_var(is_coupled_var))
     is_coupled_check.pack()
 
+    # fourier transform plotting
+    plot_fft_var = tk.IntVar()
+    plot_fft_check = tk.Checkbutton(root, text="Plot Fourier transform of selection", variable=plot_fft_var, onvalue=1, offvalue=0, command=lambda: set_plot_fft_var(plot_fft_var))
+    plot_fft_check.pack()
+
+    # friction loop plotting
+    friction_loop_frame = tk.Frame()
+    friction_loop_label = tk.Label(friction_loop_frame, text="Friction loop plotting")
+    friction_loop_label.grid(row=0, column=0, columnspan=4, pady=12)
+    friction_loop_cycle_start_label = tk.Label(friction_loop_frame, text="First cycle: ")
+    friction_loop_cycle_start_label.grid(row=1, column=0)
+    friction_loop_cycle_start_entry = tk.Entry(friction_loop_frame, width=5)
+    friction_loop_cycle_start_entry.grid(row=1, column=1, padx=(0,4))
+    friction_loop_cycle_end_label = tk.Label(friction_loop_frame, text="Last cycle: ")
+    friction_loop_cycle_end_label.grid(row=1, column=2, padx=(4,0))
+    friction_loop_cycle_end_entry = tk.Entry(friction_loop_frame, width=5)
+    friction_loop_cycle_end_entry.grid(row=1, column=3)
+    plot_friction_loop_btn = tk.Button(friction_loop_frame, text="Plot friction loop", width=15, command=lambda: plot_friction_loop((int(friction_loop_cycle_start_entry.get()), int(friction_loop_cycle_end_entry.get()))))
+    plot_friction_loop_btn.grid(row=2, column=0, columnspan=4, pady=8)
+    friction_loop_frame.pack()
+
+    # unit conversion
+
     # submit button
-    submit_btn = tk.Button(root, text="Submit", command=main)
-    submit_btn.pack(padx=32, pady=12)
+    submit_btn = tk.Button(root, text="Submit", command=main, width=15)
+    submit_btn.pack(padx=32, pady=(32,12))
 
     # clear output file for when switching datafiles
-    clear_btn = tk.Button(root, text="Clear output file", command=clear_output_file)
+    clear_btn = tk.Button(root, text="Clear output file", command=clear_output_file, width=15)
     clear_btn.pack(padx=32, pady=(0,12))
 
     # exit button
-    exit_btn = tk.Button(root, text="Exit", command=sys.exit)
+    exit_btn = tk.Button(root, text="Exit", command=sys.exit, width=15)
     exit_btn.pack(padx=32, pady=(0,12))
     
     root.mainloop()
+
+def set_couple_var(is_coupled_var):
+    global IS_COUPLED
+    IS_COUPLED = True if is_coupled_var.get() == 1 else False
+
+def set_plot_fft_var(plot_fft_var):
+    global WILL_PLOT_FFT
+    WILL_PLOT_FFT = True if plot_fft_var.get() == 1 else False
+
 
 def clear_output_file():
     df = pd.read_csv("output/sensor_stats.csv")
@@ -75,11 +109,6 @@ def clear_output_file():
     dfT = df.T # transpose for readability
     dfT.to_csv("output/sensor_stats_T.csv", float_format="%.8E", index=True)
     df.to_csv("output/sensor_stats.csv", float_format="%.8E", index=False)
-
-def set_couple_var(is_coupled_var):
-    global IS_COUPLED
-    IS_COUPLED = True if is_coupled_var.get() == 1 else False
-    print(IS_COUPLED)
 
 def get_file(label_var):
     fp = filedialog.askopenfilename(initialdir=os.path.join(os.getcwd(), 'data'),
@@ -161,40 +190,148 @@ def get_sr(df):
     avg_sample_interval = np.mean(np.diff(df[COLUMN_HEADERS[0]]))
     return 1 / avg_sample_interval
 
+def find_closest(df, col, target):
+    idx = np.abs(df[col] - target).idxmin()
+    return idx
 
-def find_num_cycles(df, column_name, col_xranges):
-    xmin, xmax = col_xranges[column_name]
+def plot_friction_loop(cycle_range):
+    global FILE
+    df = read_lvm(FILE)
+    xdata = df[COLUMN_HEADERS[0]]
+
+    cycle_start, cycle_end = cycle_range
+    n_cycles, n_cycles_prior, cycle_points = find_num_cycles(df, COLUMN_HEADERS[1])
+    cycle_points = cycle_points[cycle_start-1:cycle_end]
+    
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    
+    for i, (t0,tf) in enumerate(cycle_points):
+        idx0, idxf = find_closest(df, COLUMN_HEADERS[0], t0), find_closest(df, COLUMN_HEADERS[0], tf)
+        df_seg = df.iloc[idx0:idxf]
+        ax.plot(df_seg[COLUMN_HEADERS[1]], df_seg[COLUMN_HEADERS[2]], '.', markersize=2, color=f'C{i}', label=f"cycle: {i+cycle_start}")
+
+    if n_cycles <= 3:
+        legend = ax.legend(loc='best', framealpha=0.3)
+    else: # put legend outside plot if more than 3 datasets for readability
+        legend = ax.legend(loc='upper left', bbox_to_anchor=(1, 1), framealpha=0.3)
+
+    plt.xlabel("Drive voltage (V)")
+    plt.ylabel("Friction voltage (V)")
+    plt.title(f"Friction Loop for cycles: {cycle_start} - {cycle_end}")
+    plt.grid(True)
+    fig.tight_layout()
+    fig.savefig(f"figures/friction_loop_cycles{cycle_start}-{cycle_end}.png", bbox_extra_artists=(legend,), dpi=400)
+    plt.close(fig)
+
+    print(n_cycles, n_cycles_prior, cycle_points)
+
+
+
+def plot_fft(freqs, mag, dom_freq, sensor_num):
+    fig = plt.figure(figsize=(10, 6))
+    ax = fig.add_subplot(111)
+    ax.plot(freqs, mag, color='red', label=f"Dominant frequency sensor {sensor_num}: {dom_freq:.4f} Hz")
+    ax.legend()
+    plt.xlabel("Frequency (Hz)")
+    plt.ylabel("Magnitude normalized")
+    plt.title("Fourier Transform of Selected Signal Data")
+    plt.grid(True)
+    fig.tight_layout()
+    fig.savefig(f"figures/sensor{sensor_num}_selected_signal_fft.png")
+    plt.close(fig)
+
+def find_xrange_from_cycle_range():
+    pass
+
+def gaussian_parabolic_interpolation(freqs, magnitudes, est_max_freq_index):
+    """
+    Perform Gaussian interpolation to estimate a more accurate peak frequency.
+
+    This method assumes the peak of the spectrum resembles a Gaussian shape.
+    It applies a logarithmic transformation to turn the Gaussian peak into a parabolic shape,
+    which can then be fitted using a parabolic interpolation formula.
+
+    The Gaussian interpolation uses the natural logarithm of three points around the peak magnitude
+    to fit a parabola and then estimates the vertex of this parabola to find a refined peak frequency.
+    
+    Args:
+        freqs (numpy.ndarray): Array of frequency bins.
+        magnitudes (numpy.ndarray): Array of magnitude values from FFT.
+        index (int): Index of the detected peak in magnitudes.
+
+    Returns:
+        float: Interpolated frequency at the peak.
+    """
+    if 0 < est_max_freq_index < len(magnitudes) - 1:
+        # logarithmic transformation of magnitudes at index and its neighbors
+        y1 = np.log(magnitudes[est_max_freq_index - 1])
+        y2 = np.log(magnitudes[est_max_freq_index])
+        y3 = np.log(magnitudes[est_max_freq_index + 1])
+
+        # Parabolic interpolation to find the precise peak location
+        # p calculates the offset from the central frequency based on the vertex of the parabola
+        p = 0.5 * (y1 - y3) / (y1 - 2 * y2 + y3)
+
+        # Calculate the actual frequency by adjusting from the central frequency
+        # This step adjusts the frequency at the maximum magnitude index by the interpolated offset
+        return freqs[est_max_freq_index] + p * (freqs[1] - freqs[0])
+    else:
+        # Return the frequency directly if the peak is at the boundaries
+        return freqs[est_max_freq_index]
+    
+def find_num_cycles(df, column_name, col_xranges=None):
+    """
+    Analyze the signal to find the number of cycles within specified range using FFT.
+
+    This function applies Gaussian interpolation to the FFT results to obtain a more accurate
+    estimation of the dominant frequency, especially useful when dealing with sharp spectral peaks.
+
+    Args:
+        df (DataFrame): The dataframe containing signal data.
+        column_name (str): The name of the column containing signal data.
+        col_xranges (dict, optional): A dictionary specifying the min and max x-ranges for analysis.
+
+    Returns:
+        tuple: A tuple containing the number of cycles, cycles prior to the range, and cycle points.
+    """
+    if col_xranges is not None:
+        xmin, xmax = col_xranges[column_name]
+    else:  # if col_xrange not specified, use whole range
+        xmin, xmax = 0, df[COLUMN_HEADERS[0]].iloc[-1]
     xmin = max(0, xmin)
     xmax = min(df[COLUMN_HEADERS[0]].iloc[-1], xmax)
     range_df = df[(df[COLUMN_HEADERS[0]] >= xmin) & (df[COLUMN_HEADERS[0]] <= xmax)]
 
-    signal_fft = np.fft.fft(range_df[column_name]) # Fast Fourier transform of signal data to find dominant frequency
-    N = len(range_df[column_name]) # N points
-    T = np.mean(np.diff(df[COLUMN_HEADERS[0]])) # sampling interval
-    
-    freqs = np.fft.fftfreq(N, T)[:N // 2] # fft produces mirror image, so we only need half the data hence the [:N//2]
-    magnitude = np.abs(signal_fft)[:N // 2] # take only real parts of fft
-    magnitude_norm = magnitude * (1 / N) # normalize magnitude by number of points
+    signal_fft = np.fft.fft(range_df[column_name])
+    N = len(range_df[column_name])
+    T = np.mean(np.diff(df[COLUMN_HEADERS[0]]))
+
+    freqs = np.fft.fftfreq(N, T)[:N // 2]
+    magnitude = np.abs(signal_fft)[:N // 2]
+    magnitude_norm = magnitude * (1 / N)
     max_magnitude_idx = np.argmax(magnitude_norm)
-    dom_freq = freqs[max_magnitude_idx]
+
+    # Interpolate to find a more accurate peak frequency
+    dom_freq = gaussian_parabolic_interpolation(freqs, magnitude_norm, max_magnitude_idx)
 
     selection_duration = xmax - xmin
     n_cycles = dom_freq * selection_duration
-
-    # find n_cycles before selection to cycle labelling knows where to start
-    n_cycles_prior = dom_freq * (xmin - 0)
-
-    # Generate cycle start and end points
+    n_cycles_prior = dom_freq * xmin
     period = 1 / dom_freq
     cycle_points = []
     current_x = xmin
-    while current_x + 0.5*period <= xmax:
+    while current_x + 0.5 * period <= xmax:
         cycle_points.append((current_x, current_x + period))
         current_x += period
 
-    print(f"***Selection contains approximately {n_cycles} cycles between {xmin}s and {xmax}s\n{cycle_points}")
+    print(f"***Selection contains approximately {n_cycles} cycles between {xmin}s and {xmax}s")
 
-    # Return the list of cycle start and end x-values
+    global WILL_PLOT_FFT
+    if WILL_PLOT_FFT:
+        sensor_num = int(column_name[-1]) + 1
+        plot_fft(freqs, magnitude_norm, dom_freq, sensor_num)
+
     return n_cycles, n_cycles_prior, cycle_points
 
 

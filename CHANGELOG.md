@@ -1,14 +1,20 @@
 ## WIP
 
-- zoom in selections of plot
-- ability to cancel selections (zoom back out) by hitting escape
-- friction loop plot
-    - friction voltage (sensor 2) vs position voltage (sensor 1)
-    - choose range of cycles to include in friction loop plot
-- entries for scalar values to change units
+- entries for scalar values to change units (NEEDS CLARIFICATION)
 
 
 # Changelog
+
+4/12
+- checkbox in ui gives user ability to plot the fourier transform of their selection
+    - calls a plotting function from the find_num_cycles function if checked
+- more precise estimation of dominant frequency using parabolic interpolation
+- friction loop plotting
+    - gets the cycles from find_num_cycles
+    - gets the values of sensor 2 and plots them against sensor 1
+        - values are those between each time range from find_num_cycles
+        - time range values aren't exactly what's in the df so a find closest function was introduced
+    - ui options introduced to indicate the starting and ending cycles being plotted and button to do the plotting
 
 4/10
 - added function to find the number of cycles in a given selection

@@ -1,2 +1,2 @@
-xmin,xmax,Voltage_0_mean,Voltage_0_stddev,Voltage_1_mean,Voltage_1_stddev,Voltage_2_mean,Voltage_2_stddev,Voltage_3_mean,Voltage_3_stddev
-4.44120000E+01,5.42480000E+01,-9.50408434E-03,8.98800000E-03,2.84732952E-02,2.93330000E-02,-1.00000000E+01,-1.00000000E+01,1.00000000E+01,1.00000000E+01
+Voltage_0_xmin,Voltage_0_xmax,Voltage_0_mean,Voltage_0_stddev,Voltage_1_xmin,Voltage_1_xmax,Voltage_1_mean,Voltage_1_stddev,Voltage_2_xmin,Voltage_2_xmax,Voltage_2_mean,Voltage_2_stddev,Voltage_3_xmin,Voltage_3_xmax,Voltage_3_mean,Voltage_3_stddev
+4.84230000E+01,5.49800000E+01,-2.78128326E-02,-1.27170000E-02,6.88800000E+00,1.09860000E+01,8.54484460E-03,2.83680000E-02,,,,,,,,
