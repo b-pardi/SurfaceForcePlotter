@@ -20,10 +20,6 @@ except:
 import matplotlib.pyplot as plt
 from matplotlib.widgets import SpanSelector
 
-'''To Do
-- setup span selector
-- couple 4 subplots of span selector together
-'''
 
 # global vars
 FILE = ""
@@ -123,6 +119,27 @@ def get_file(label_var):
 
 
 def read_lvm(fp):
+    """
+    Reads data from an LVM file, a proprietary format used for storing sensor data. This function handles the format's 
+    specific characteristics, including headers and text encoding, to extract and convert sensor data into a Pandas DataFrame.
+
+    Details:
+        - The function opens and reads the raw contents of an LVM file, handling the text encoding and line ending conversions.
+        - It uses a regular expression to locate the start of the actual data section, which is marked by a specific header string.
+        - The data, once located, is extracted, decoded, and loaded into a DataFrame for easy manipulation and analysis.
+        - The extracted data is also saved to a CSV file for further use or archival purposes.
+
+    Note:
+        - LVM files may contain multiple sections or types of data, but this function specifically looks for the data section following the 
+          second occurrence of a header marker.
+        - This function assumes that the data columns are properly formatted and separated in a way that Pandas can directly interpret.
+
+    Args:
+        fp (str): The file path of the LVM file to read.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing the parsed sensor data from the LVM file.
+    """
     with open(fp, 'rb') as file:
         raw_file = file.read()
 
@@ -143,6 +160,7 @@ def read_lvm(fp):
 
 # plot formatting
 def generate_int_plot():
+    '''Bunch of unexciting code to init and format the interactive plot window(s)'''
     # declare plot and subplots
     span_plot = plt.figure()
     plt.subplots_adjust(hspace=0.2, wspace=0.2)
@@ -187,14 +205,38 @@ def generate_int_plot():
 
 
 def get_sr(df):
+    '''Calculates the sampling rate of the data by determining the average interval between samples in the primary data column'''
+
     avg_sample_interval = np.mean(np.diff(df[COLUMN_HEADERS[0]]))
     return 1 / avg_sample_interval
 
 def find_closest(df, col, target):
+    ''' Identifies the index of the closest value in a specified column of the DataFrame to a target value '''
     idx = np.abs(df[col] - target).idxmin()
     return idx
 
 def plot_friction_loop(cycle_range):
+    """
+    Generates a plot of friction loops from Surface Force Apparatus sensor data, visualizing the relationship between 
+    drive voltage and friction voltage for each cycle within a specified range. In SFA experiments, friction loops 
+    illustrate the cyclic behavior of frictional forces between two surfaces as they are driven back and forth, 
+    providing insights into material properties and interactions.
+
+    Details:
+        - Each cycle's drive voltage versus friction voltage is plotted, showcasing the hysteresis or energy dissipation characteristics typical of frictional interactions.
+        - Cycles are color-coded and labeled for clarity, with enhancements for readability when numerous cycles are displayed.
+        - The plot is saved to a file and includes cycle statistics, aiding in the analysis of surface interactions over repeated cycles.
+
+    Note:
+        - This function relies on global variables such as `FILE` and `COLUMN_HEADERS` to access and interpret the data.
+        - Designed to handle datasets with potentially complex or noisy cycle patterns, providing clear visualization and data interpretation.
+
+    Args:
+        cycle_range (tuple): A tuple containing the start and end cycle numbers to plot, e.g., (1, 5).
+
+    Returns:
+        None: This function does not return any values but saves the plot to a file and outputs cycle information.
+    """
     global FILE
     df = read_lvm(FILE)
     xdata = df[COLUMN_HEADERS[0]]
@@ -227,8 +269,8 @@ def plot_friction_loop(cycle_range):
     print(n_cycles, n_cycles_prior, cycle_points)
 
 
-
 def plot_fft(freqs, mag, dom_freq, sensor_num):
+    '''plot the Fast Fourier Transform found in find_num_cycles'''
     fig = plt.figure(figsize=(10, 6))
     ax = fig.add_subplot(111)
     ax.plot(freqs, mag, color='red', label=f"Dominant frequency sensor {sensor_num}: {dom_freq:.4f} Hz")
@@ -336,6 +378,32 @@ def find_num_cycles(df, column_name, col_xranges=None):
 
 
 def statistically_analyze_selected_range(df, imin, imax, cur_col, col_xranges):
+    """
+    Analyzes a specified range of data from a DataFrame representing Surface Force Apparatus (SFA) sensor data,
+    calculating statistics such as mean and standard deviation for selected or specified column ranges.
+
+    Details:
+        - If the data analysis is coupled (IS_COUPLED is True), the function analyzes all columns across a specified global range.
+        - If uncoupled, it processes individual columns based on specific x-ranges provided in `col_xranges`.
+        - The function calculates the minimum and maximum x-values, mean, and standard deviation for the selected data ranges.
+        - The results are saved to CSV files for easy access and further analysis.
+
+    Note:
+        - This function assumes there is a global variable `IS_COUPLED` which dictates whether all columns are analyzed together or separately.
+        - `COLUMN_HEADERS` should include all relevant column names used in the DataFrame and is assumed to be defined globally.
+        - The function modifies the global data context by saving results directly to files, which might affect concurrent operations on the data.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing the sensor data.
+        imin (int): Index of the starting row in the DataFrame for the range to be analyzed.
+        imax (int): Index of the ending row in the DataFrame for the range to be analyzed.
+        cur_col (str): Currently selected column header from the DataFrame.
+        col_xranges (dict): Dictionary mapping column names to tuples of (xmin, xmax) specifying custom ranges for each column.
+
+    Returns:
+        None: This function does not return any values but outputs statistical analysis results to CSV files.
+    """
+    
     global IS_COUPLED
     
     if IS_COUPLED: # analyze all columns if couple
@@ -381,6 +449,7 @@ def statistically_analyze_selected_range(df, imin, imax, cur_col, col_xranges):
 
 
 def reset_ax(ax, df):
+    ''' util function to reset axes of zoomed in plots in interactive plot when ESC pressed'''
     init_xmin = df[COLUMN_HEADERS[0]].min()
     init_xmax = df[COLUMN_HEADERS[0]].max()
     ax.set_xlim(init_xmin, init_xmax)
@@ -408,6 +477,28 @@ def on_key(event, sensor_axes, df, spans, col_xranges):
 
 
 def int_plot(df):
+    """
+    Generates an interactive plot for Surface Force Apparatus sensor data, allowing users to select ranges for statistical analysis 
+    and visualize sensor data across multiple subplots. The plot supports dynamic range selection and updates statistical calculations 
+    and visual annotations based on user interactions.
+
+    Details:
+        - Initializes a multi-subplot figure with one subplot per sensor channel.
+        - Users can select data ranges directly on the plot; this function handles the creation and updating of these selections.
+        - Statistical analysis of the selected data ranges is performed dynamically, and results are updated upon each selection.
+        - The function also supports coupled analysis across all channels or individual analysis per channel based on the `IS_COUPLED` global state.
+
+    Note:
+        - The function relies on global variables such as `IS_COUPLED` and `COLUMN_HEADERS` for configuration and assumes they are defined prior to calling.
+        - It employs callback functions to handle the interactivity of the plot, specifically responding to range selections.
+        - This function is designed to work within a graphical user interface environment where matplotlib's interactive features are supported.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing the sensor data to be plotted and analyzed. The DataFrame should have columns as specified in `COLUMN_HEADERS`.
+
+    Returns:
+        None: This function primarily handles the display and interaction logic for data analysis and does not return any values.
+    """
     global IS_COUPLED
     span_plot, ax, s1_ax, s2_ax, s3_ax, s4_ax = generate_int_plot()
     sensor_axes = [s1_ax, s2_ax, s3_ax, s4_ax]

@@ -1,7 +1,8 @@
 ## WIP
 
 - entries for scalar values to change units (NEEDS CLARIFICATION)
-
+- y axis labels (friction, normal voltages etc.)
+- sensors 2-4 unit conversion values
 
 # Changelog
 
